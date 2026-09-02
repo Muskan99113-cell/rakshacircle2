@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RakshaCircle — Family Scam Shield</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Noto+Sans+Devanagari:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+<header class="topbar"><div class="topbar-inner">
+  <div class="brand"><span class="brand-shield">🛡️</span><span class="brand-name">Raksha<em>Circle</em></span></div>
+  <nav class="tabs"><button class="tab is-active" data-tab="analyze">Check a message</button><button class="tab" data-tab="family">Family circle</button><button class="tab" data-tab="history">Scan history</button></nav>
+  <div class="user-area"><span>🛡️ Protected locally</span></div>
+</div></header>
+<main>
+<section class="panel is-active" id="panel-analyze"><div class="analyze-grid">
+<div class="input-col">
+<h1>Check messages, links, screenshots & PDFs before they cause trouble.</h1>
+<p class="lede">Paste the message or add a link, image/screenshot, or PDF. RakshaCircle checks the combined evidence and explains the risk in simple language.</p>
+<form id="analyze-form">
+<label class="field-label">Message text</label>
+<textarea id="message-input" name="message" placeholder="Yahan WhatsApp/SMS/email message paste karein..."></textarea>
+<div class="char-count"><span id="char-count">0</span> / 8000</div>
+<div class="attachment-grid">
+  <label class="upload-card"><span>📎</span><b>Add files</b><small>Images, screenshots, PDFs · max 5</small><input id="attachments" name="attachments" type="file" accept="image/png,image/jpeg,image/webp,application/pdf" multiple></label>
+  <div class="link-card"><label for="link-input">🔗 Link / URL</label><input id="link-input" name="link" type="url" placeholder="https://cybercrime.gov.in"></div>
+</div>
+<div id="file-list" class="file-list"></div>
+<button id="analyze-btn" type="submit" class="btn-primary"><span class="btn-label">Analyze safely</span><span class="btn-spinner"></span></button>
+</form>
+<div class="disclaimer-line">RakshaCircle is a defensive screening tool, not proof of a compromise. If money has already been sent, call <strong>1930</strong> immediately.</div>
+</div>
+<div class="result-col">
+<div id="result-empty" class="result-empty"><div class="big-icon">🔎</div><p>Your result will appear here.</p></div>
+<div id="result-loading" class="result-loading" hidden><div class="pulse-ring"></div><p>Reading the message and attachments…</p></div>
+<div id="result-error" class="result-error" hidden></div>
+<div id="result-content" hidden>
+<div class="score-row"><div class="meter-wrap"><svg viewBox="0 0 120 120" class="meter-svg"><circle cx="60" cy="60" r="52" class="meter-track"/><circle cx="60" cy="60" r="52" class="meter-fill" id="meter-fill"/></svg><div class="meter-number"><span id="score-number">0</span></div></div>
+<div class="score-meta"><div class="risk-label" id="risk-label">—</div><div class="lang-tag">Language: <span id="lang-detected">—</span></div><div class="alert-tag" id="alert-tag" hidden>Family alert triggered</div></div></div>
+<div class="evidence" id="evidence"></div>
+<div class="flags-block"><h2>What stood out</h2><ul id="flags-list"></ul></div>
+<div class="explain-block"><h2>In plain words</h2><p id="explanation-text"></p></div>
+<div class="action-block"><h2>What to do next</h2><p id="action-text"></p></div>
+</div></div></div></section>
+
+<section class="panel" id="panel-family"><div class="panel-inner">
+<h1>Family circle</h1><p class="lede">Add trusted people. For a high-risk result (70+), RakshaCircle creates an alert. Real SMS is optional through Twilio; without credentials it stays simulated.</p>
+<form id="family-form" class="family-form"><div class="form-row"><div class="form-field"><label>Name</label><input id="member-name" required placeholder="e.g. Mom"></div><div class="form-field"><label>Relation</label><input id="member-relation" placeholder="e.g. Mother"></div><div class="form-field"><label>Phone</label><input id="member-phone" required placeholder="+91..."></div></div><button class="btn-secondary">+ Add contact</button></form>
+<ul id="family-list" class="family-list"></ul><p id="family-empty" class="family-empty">No trusted contacts yet.</p></div></section>
+
+<section class="panel" id="panel-history"><div class="panel-inner"><h1>Recent scans</h1><p class="lede">Your scan history is private to your account.</p><div id="history-list" class="history-list"></div></div></section>
+</main>
+<footer class="site-footer"><p>RakshaCircle is a hackathon prototype. Never share OTPs, passwords or UPI PINs. In active cyber fraud, contact 1930 or <a href="https://cybercrime.gov.in" target="_blank" rel="noopener">cybercrime.gov.in</a>.</p></footer>
+<script src="{{ url_for('static', filename='js/script.js') }}"></script>
+</body></html>

@@ -1,968 +1,834 @@
 import os
-import io
 import json
-import re
-import sqlite3
 import base64
-from datetime import datetime, timezone
+import sqlite3
+import smtplib
+from email.message import EmailMessage
 
 import requests
-from flask import Flask, request, jsonify, render_template, g
+from flask import Flask, render_template, request, jsonify
 from dotenv import load_dotenv
 
 load_dotenv()
 
 app = Flask(__name__)
-app.secret_key = os.environ.get(
+
+app.config["SECRET_KEY"] = os.getenv(
     "SECRET_KEY",
-    "change-this-secret-key"
+    "rakshacircle-hackathon-secret-2026"
 )
 
-# ============================================================
-# OPENROUTER CONFIG
-# ============================================================
-
-OPENROUTER_API_KEY = os.environ.get(
-    "OPENROUTER_API_KEY",
-    ""
-).strip()
-
-MODEL_NAME = os.environ.get(
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+OPENROUTER_MODEL = os.getenv(
     "OPENROUTER_MODEL",
     "openrouter/free"
-).strip()
+)
 
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
-
-# ============================================================
-# APP / DATABASE CONFIG
-# ============================================================
-
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-
-DB_PATH = os.path.join(
-    BASE_DIR,
-    "rakshacircle.db"
-)
-
-LOCAL_USER_ID = 1
-LOCAL_USER_NAME = "RakshaCircle User"
+DB_FILE = "rakshacircle.db"
 
 
-# ============================================================
-# AI SYSTEM PROMPT
-# ============================================================
-
-SYSTEM_PROMPT = """
-You are RakshaCircle, a defensive scam-detection assistant
-for Indian users.
-
-Analyze the supplied message, URL, PDF text and/or screenshot for:
-
-- phishing and credential theft
-- UPI/bank/KYC scams
-- OTP/password/PIN requests
-- impersonation
-- fake jobs and courier scams
-- investment/crypto scams
-- malicious or suspicious links
-- urgency, threats and social engineering
-
-Do not claim something is definitely a scam unless the
-supplied evidence supports it.
-
-If an image is supplied, inspect visible text, logos, UI,
-and suspicious instructions.
-
-If a PDF is supplied, analyze its extracted text.
-
-Return ONLY valid JSON matching this structure:
-
-{
-  "risk_score": 0-100,
-  "risk_label": "Safe|Low Risk|Suspicious|High Risk|Confirmed Scam Pattern",
-  "language_detected": "language/script",
-  "red_flags": [
-    {
-      "phrase": "short exact phrase or URL from supplied content",
-      "reason": "why it is suspicious"
-    }
-  ],
-  "explanation": "2-4 simple sentences in the user's language where possible",
-  "suggested_action": "one concrete safe next step"
-}
-
-Maximum 5 red_flags.
-
-Never invent phrases or URLs that were not supplied.
-"""
-
-
-# ============================================================
+# =========================================================
 # DATABASE
-# ============================================================
-
-def now():
-    return datetime.now(timezone.utc).isoformat()
-
+# =========================================================
 
 def get_db():
-    if "db" not in g:
-        g.db = sqlite3.connect(DB_PATH)
-        g.db.row_factory = sqlite3.Row
-
-    return g.db
-
-
-@app.teardown_appcontext
-def close_db(exception=None):
-    db = g.pop("db", None)
-
-    if db:
-        db.close()
+    conn = sqlite3.connect(DB_FILE)
+    conn.row_factory = sqlite3.Row
+    return conn
 
 
 def init_db():
+    conn = get_db()
 
-    db = sqlite3.connect(DB_PATH)
-
-    # Family members
-    db.execute("""
-        CREATE TABLE IF NOT EXISTS family_members(
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS family_members (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER NOT NULL,
             name TEXT NOT NULL,
             relation TEXT,
-            phone TEXT NOT NULL,
-            created_at TEXT NOT NULL
+            phone TEXT,
+            email TEXT
         )
     """)
 
-    # Scan history
-    db.execute("""
-        CREATE TABLE IF NOT EXISTS scan_history(
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS scans (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER NOT NULL,
-            message_snippet TEXT,
-            attachment_names TEXT,
-            link TEXT,
-            risk_score INTEGER,
-            risk_label TEXT,
-            language_detected TEXT,
-            alerted_family INTEGER DEFAULT 0,
-            created_at TEXT NOT NULL
+            input_type TEXT,
+            content TEXT,
+            score INTEGER,
+            risk TEXT,
+            language TEXT,
+            explanation TEXT,
+            action TEXT,
+            evidence TEXT,
+            red_flags TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
 
-    db.commit()
-    db.close()
+    conn.commit()
+    conn.close()
 
 
-# ============================================================
-# TEMPLATE CONTEXT
-# ============================================================
+init_db()
 
-@app.context_processor
-def inject_user():
-    return {
-        "current_user_name": LOCAL_USER_NAME
+
+# =========================================================
+# AI PROMPT
+# =========================================================
+
+SYSTEM_PROMPT = """
+You are RakshaCircle, an AI-powered scam detection and protection assistant.
+
+Analyze the user's submitted message, link, document, or image.
+
+Your job:
+1. Detect scam, fraud, phishing, impersonation, or social-engineering indicators.
+2. Give a risk score from 0 to 100.
+3. Identify the likely language.
+4. Explain the reasoning in simple language.
+5. Give practical safety action.
+6. Identify evidence and red flags.
+
+Return ONLY valid JSON in this exact format:
+
+{
+  "score": 0,
+  "risk": "Safe",
+  "language": "English",
+  "evidence": [
+    "example evidence"
+  ],
+  "red_flags": [
+    "example red flag"
+  ],
+  "explanation": "simple explanation",
+  "action": "recommended action"
+}
+
+Risk rules:
+
+0-29 = Safe
+30-59 = Suspicious
+60-79 = High Risk
+80-100 = Scam
+
+Be conservative and safety-focused.
+
+Never invent evidence that is not present in the submitted content.
+"""
+
+
+# =========================================================
+# OPENROUTER
+# =========================================================
+
+def analyze_with_openrouter(user_content, image_data=None):
+
+    if not OPENROUTER_API_KEY:
+        raise RuntimeError(
+            "OPENROUTER_API_KEY is missing."
+        )
+
+    headers = {
+        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+        "Content-Type": "application/json",
+        "HTTP-Referer": "http://localhost:5000",
+        "X-Title": "RakshaCircle"
     }
 
+    if image_data:
 
-# ============================================================
-# MAIN PAGE
-# ============================================================
+        content = [
+            {
+                "type": "text",
+                "text": user_content
+            },
+            {
+                "type": "image_url",
+                "image_url": {
+                    "url": image_data
+                }
+            }
+        ]
 
-@app.route("/")
-def index():
-    return render_template("index.html")
+    else:
+        content = user_content
+
+    payload = {
+        "model": OPENROUTER_MODEL,
+        "messages": [
+            {
+                "role": "system",
+                "content": SYSTEM_PROMPT
+            },
+            {
+                "role": "user",
+                "content": content
+            }
+        ],
+        "temperature": 0.1
+    }
+
+    response = requests.post(
+        OPENROUTER_URL,
+        headers=headers,
+        json=payload,
+        timeout=90
+    )
+
+    if response.status_code != 200:
+        raise RuntimeError(
+            f"OpenRouter error {response.status_code}: "
+            f"{response.text}"
+        )
+
+    data = response.json()
+
+    try:
+        answer = data["choices"][0]["message"]["content"]
+    except Exception:
+        raise RuntimeError(
+            "Invalid response received from OpenRouter."
+        )
+
+    answer = answer.strip()
+
+    if answer.startswith("```"):
+        answer = answer.replace("```json", "")
+        answer = answer.replace("```", "")
+        answer = answer.strip()
+
+    try:
+        result = json.loads(answer)
+
+    except json.JSONDecodeError:
+
+        start = answer.find("{")
+        end = answer.rfind("}")
+
+        if start != -1 and end != -1:
+
+            try:
+                result = json.loads(
+                    answer[start:end + 1]
+                )
+
+            except Exception:
+                raise RuntimeError(
+                    "AI returned invalid JSON."
+                )
+
+        else:
+            raise RuntimeError(
+                "AI returned an invalid response."
+            )
+
+    return result
 
 
-# ============================================================
-# OLD LOGOUT ROUTE
-# ============================================================
+# =========================================================
+# PDF EXTRACTION
+# =========================================================
 
-@app.route("/logout")
-def logout():
-
-    return jsonify({
-        "message": "Login is not required in this local prototype."
-    })
-
-
-# ============================================================
-# PDF TEXT EXTRACTION
-# ============================================================
-
-def extract_pdf_text(data):
+def extract_pdf_text(file):
 
     try:
 
         from pypdf import PdfReader
 
-        reader = PdfReader(
-            io.BytesIO(data)
-        )
+        reader = PdfReader(file)
 
-        parts = []
+        pages = []
 
-        for page in reader.pages[:10]:
+        for page in reader.pages:
 
-            text = page.extract_text() or ""
+            text = page.extract_text()
 
-            parts.append(text)
+            if text:
+                pages.append(text)
 
-        return "\n".join(parts)[:12000]
+        return "\n".join(pages)
 
-    except Exception as exc:
-
-        return (
-            f"[PDF text extraction failed: {exc}]"
-        )
-
-
-# ============================================================
-# URL DETECTION
-# ============================================================
-
-def find_urls(text):
-
-    return re.findall(
-        r'https?://[^\s<>"\']+',
-        text or "",
-        flags=re.I
-    )
-
-
-# ============================================================
-# OPENROUTER AI ANALYSIS
-# ============================================================
-
-def analyze_with_openrouter(
-    message_text,
-    link,
-    attachment_text,
-    image_parts
-):
-
-    if not OPENROUTER_API_KEY:
+    except Exception as e:
 
         raise RuntimeError(
-            "OPENROUTER_API_KEY is missing. "
-            "Add your OpenRouter key to .env."
+            f"Could not read PDF: {e}"
         )
 
-    all_urls = (
-        find_urls(message_text)
-        + find_urls(link)
-        + find_urls(attachment_text)
+
+# =========================================================
+# EMAIL ALERT
+# =========================================================
+
+def send_email_alert(member, result):
+
+    smtp_host = os.getenv("SMTP_HOST")
+    smtp_port = int(
+        os.getenv("SMTP_PORT", "587")
     )
 
-    prompt = f"""
-USER MESSAGE:
-{message_text[:8000] or "None"}
+    smtp_user = os.getenv("SMTP_USER")
+    smtp_password = os.getenv("SMTP_PASSWORD")
 
-EXPLICIT LINK FIELD:
-{link[:2000] or "None"}
+    if not all([
+        smtp_host,
+        smtp_user,
+        smtp_password,
+        member["email"]
+    ]):
+        return False
 
-EXTRACTED PDF/ATTACHMENT TEXT:
-{attachment_text[:12000] or "None"}
+    msg = EmailMessage()
 
-LINKS FOUND:
-{", ".join(all_urls) or "None"}
+    msg["Subject"] = "RakshaCircle Safety Alert"
+    msg["From"] = smtp_user
+    msg["To"] = member["email"]
 
-Analyze all supplied evidence.
+    msg.set_content(
+        f"""
+RakshaCircle Safety Alert
 
-Images/screenshots are supplied as image parts.
+A potentially dangerous message/content was detected.
 
-Return ONLY a single valid JSON object.
-Do not use markdown fences.
-Do not add commentary.
+Risk: {result.get("risk", "Unknown")}
+Risk Score: {result.get("score", 0)}/100
+
+Explanation:
+{result.get("explanation", "")}
+
+Recommended Action:
+{result.get("action", "")}
+
+Please verify the sender before taking any action.
 """
+    )
 
-    # First text message
-    user_content = [
-        {
-            "type": "text",
-            "text": prompt
-        }
-    ]
+    with smtplib.SMTP(
+        smtp_host,
+        smtp_port
+    ) as server:
 
-    # Add images
-    for image in image_parts[:4]:
+        server.starttls()
 
-        user_content.append({
-            "type": "image_url",
-            "image_url": {
-                "url": (
-                    f"data:{image['mime_type']};"
-                    f"base64,{image['data']}"
-                )
-            }
-        })
+        server.login(
+            smtp_user,
+            smtp_password
+        )
 
-    payload = {
+        server.send_message(msg)
 
-        "model": MODEL_NAME,
+    return True
 
-        "messages": [
 
-            {
-                "role": "system",
-                "content": SYSTEM_PROMPT
-            },
+# =========================================================
+# WHATSAPP ALERT - META CLOUD API
+# =========================================================
 
-            {
-                "role": "user",
-                "content": user_content
-            }
+def send_whatsapp_alert(member, result):
 
-        ],
+    access_token = os.getenv(
+        "WHATSAPP_ACCESS_TOKEN"
+    )
 
-        "temperature": 0.1,
+    phone_number_id = os.getenv(
+        "WHATSAPP_PHONE_NUMBER_ID"
+    )
 
-        "max_tokens": 1200
-    }
+    if not all([
+        access_token,
+        phone_number_id,
+        member["phone"]
+    ]):
+        print(
+            "WhatsApp configuration missing."
+        )
+        return False
+
+    to_number = str(
+        member["phone"]
+    ).strip()
+
+    # Remove spaces, brackets and hyphens
+    to_number = (
+        to_number
+        .replace(" ", "")
+        .replace("-", "")
+        .replace("(", "")
+        .replace(")", "")
+    )
+
+    # If Indian number is entered as 10 digits,
+    # automatically add +91.
+    if len(to_number) == 10:
+        to_number = "+91" + to_number
+
+    # Remove + because Meta API expects digits
+    to_number = to_number.replace("+", "")
+
+    url = (
+        "https://graph.facebook.com/v23.0/"
+        f"{phone_number_id}/messages"
+    )
 
     headers = {
-
-        "Authorization":
-            f"Bearer {OPENROUTER_API_KEY}",
-
-        "Content-Type":
-            "application/json",
-
-        "HTTP-Referer":
-            "http://localhost:5000",
-
-        "X-Title":
-            "RakshaCircle"
+        "Authorization": (
+            f"Bearer {access_token}"
+        ),
+        "Content-Type": "application/json"
     }
 
-    # --------------------------------------------------------
-    # API REQUEST
-    # --------------------------------------------------------
+    # -----------------------------------------------------
+    # TEST TEMPLATE
+    # -----------------------------------------------------
+    #
+    # Meta's WhatsApp test environment requires
+    # an approved template.
+    #
+    # hello_world is the standard test template.
+    #
+
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": to_number,
+        "type": "template",
+        "template": {
+            "name": "hello_world",
+            "language": {
+                "code": "en_US"
+            }
+        }
+    }
 
     try:
 
         response = requests.post(
-
-            OPENROUTER_URL,
-
+            url,
             headers=headers,
-
             json=payload,
-
-            timeout=90
+            timeout=30
         )
-
-    except requests.RequestException as exc:
-
-        raise RuntimeError(
-            f"OpenRouter connection failed: {exc}"
-        ) from exc
-
-
-    # --------------------------------------------------------
-    # API ERROR
-    # --------------------------------------------------------
-
-    if response.status_code >= 400:
-
-        try:
-
-            detail = (
-                response.json()
-                .get("error", {})
-                .get("message", response.text)
-            )
-
-        except ValueError:
-
-            detail = response.text
-
-        raise RuntimeError(
-            f"OpenRouter API "
-            f"{response.status_code}: "
-            f"{detail}"
-        )
-
-
-    # --------------------------------------------------------
-    # RESPONSE PARSING
-    # --------------------------------------------------------
-
-    try:
-
-        data = response.json()
-
-        raw = (
-            data["choices"][0]["message"]
-            .get("content")
-            or ""
-        ).strip()
-
-    except (
-        ValueError,
-        KeyError,
-        IndexError,
-        TypeError
-    ) as exc:
-
-        raise RuntimeError(
-            "OpenRouter returned an unexpected response."
-        ) from exc
-
-
-    if not raw:
-
-        raise RuntimeError(
-            "OpenRouter returned an empty response."
-        )
-
-
-    # --------------------------------------------------------
-    # REMOVE MARKDOWN JSON FENCES
-    # --------------------------------------------------------
-
-    raw = re.sub(
-        r"^```(?:json)?\s*",
-        "",
-        raw,
-        flags=re.I
-    )
-
-    raw = re.sub(
-        r"\s*```$",
-        "",
-        raw
-    ).strip()
-
-
-    # --------------------------------------------------------
-    # JSON PARSING
-    # --------------------------------------------------------
-
-    try:
-
-        result = json.loads(raw)
-
-    except json.JSONDecodeError:
-
-        # Try finding JSON object inside response
-        match = re.search(
-            r"\{.*\}",
-            raw,
-            flags=re.S
-        )
-
-        if not match:
-
-            raise RuntimeError(
-                "OpenRouter returned invalid JSON."
-            )
-
-        try:
-
-            result = json.loads(
-                match.group(0)
-            )
-
-        except json.JSONDecodeError as exc:
-
-            raise RuntimeError(
-                "OpenRouter returned invalid JSON."
-            ) from exc
-
-
-    # --------------------------------------------------------
-    # DEFAULT VALUES
-    # --------------------------------------------------------
-
-    result.setdefault(
-        "risk_score",
-        50
-    )
-
-    result.setdefault(
-        "risk_label",
-        "Suspicious"
-    )
-
-    result.setdefault(
-        "language_detected",
-        "Unknown"
-    )
-
-    result.setdefault(
-        "red_flags",
-        []
-    )
-
-    result.setdefault(
-        "explanation",
-        ""
-    )
-
-    result.setdefault(
-        "suggested_action",
-        ""
-    )
-
-    return result
-
-
-# ============================================================
-# TWILIO SMS
-# ============================================================
-
-def send_sms_alert(phone, score):
-
-    """
-    Optional Twilio SMS.
-
-    If Twilio credentials are not configured,
-    the alert is simulated in the terminal.
-    """
-
-    sid = os.environ.get(
-        "TWILIO_ACCOUNT_SID"
-    )
-
-    token = os.environ.get(
-        "TWILIO_AUTH_TOKEN"
-    )
-
-    from_number = os.environ.get(
-        "TWILIO_FROM_NUMBER"
-    )
-
-
-    # No Twilio = local simulation
-    if not (
-        sid
-        and token
-        and from_number
-    ):
 
         print(
-            f"[SIMULATED FAMILY ALERT] "
-            f"To {phone}: "
-            f"high-risk scan, "
-            f"score {score}."
+            "WHATSAPP STATUS:",
+            response.status_code
+        )
+
+        print(
+            "WHATSAPP RESPONSE:",
+            response.text
+        )
+
+        if response.ok:
+            print(
+                "WhatsApp message sent successfully."
+            )
+            return True
+
+        return False
+
+    except Exception as e:
+
+        print(
+            "WHATSAPP ERROR:",
+            str(e)
         )
 
         return False
 
 
-    try:
-
-        from twilio.rest import Client
-
-        Client(sid, token).messages.create(
-
-            body=(
-                "RakshaCircle alert: "
-                f"a high-risk message was detected "
-                f"(score {score}). "
-                "Verify before any payment "
-                "or OTP sharing."
-            ),
-
-            from_=from_number,
-
-            to=phone
-        )
-
-        return True
-
-
-    except Exception as exc:
-
-        print(
-            f"[SMS FAILED] "
-            f"{phone}: {exc}"
-        )
-
-        return False
-
-
-# ============================================================
+# =========================================================
 # FAMILY ALERT
-# ============================================================
+# =========================================================
 
-def alert_family(score):
+def send_family_alert(result):
 
-    members = get_db().execute(
+    if result.get("score", 0) < 70:
 
-        """
-        SELECT *
-        FROM family_members
-        WHERE user_id=?
-        """,
+        return {
+            "sent": False,
+            "message": "No family alert required."
+        }
 
-        (LOCAL_USER_ID,)
+    conn = get_db()
 
+    members = conn.execute(
+        "SELECT * FROM family_members"
     ).fetchall()
 
+    conn.close()
 
     if not members:
 
-        return False, 0
+        return {
+            "sent": False,
+            "message": (
+                "High-risk result detected, "
+                "but no family member is configured."
+            )
+        }
 
-
-    sent = 0
-
+    whatsapp_count = 0
+    email_count = 0
+    errors = []
 
     for member in members:
 
-        if send_sms_alert(
-            member["phone"],
-            score
-        ):
+        # -------------------------------------------------
+        # WHATSAPP ALERT
+        # -------------------------------------------------
 
-            sent += 1
+        if member["phone"]:
+
+            try:
+
+                if send_whatsapp_alert(
+                    member,
+                    result
+                ):
+                    whatsapp_count += 1
+
+            except Exception as e:
+
+                print(
+                    "WHATSAPP ALERT ERROR:",
+                    str(e)
+                )
+
+                errors.append(
+                    f"{member['name']}: "
+                    f"WhatsApp failed - {str(e)}"
+                )
+
+        # -------------------------------------------------
+        # EMAIL ALERT
+        # -------------------------------------------------
+
+        if member["email"]:
+
+            try:
+
+                if send_email_alert(
+                    member,
+                    result
+                ):
+                    email_count += 1
+
+            except Exception as e:
+
+                print(
+                    "EMAIL ALERT ERROR:",
+                    str(e)
+                )
+
+                errors.append(
+                    f"{member['name']}: "
+                    f"Email failed - {str(e)}"
+                )
+
+    total_sent = (
+        whatsapp_count +
+        email_count
+    )
+
+    if total_sent == 0:
+
+        return {
+            "sent": False,
+            "simulated": False,
+            "message": (
+                "Family alert could not be delivered."
+            ),
+            "errors": errors
+        }
+
+    return {
+        "sent": True,
+        "simulated": False,
+        "message": (
+            "Family alert sent successfully. "
+            f"WhatsApp: {whatsapp_count}, "
+            f"Email: {email_count}."
+        ),
+        "whatsapp_count": whatsapp_count,
+        "email_count": email_count,
+        "errors": errors
+    }
 
 
-    # Family alert was triggered even if
-    # Twilio is not configured.
-    return True, sent
+# =========================================================
+# HOME
+# =========================================================
+
+@app.route("/")
+def home():
+
+    return render_template(
+        "index.html"
+    )
 
 
-# ============================================================
-# ANALYZE API
-# ============================================================
+# =========================================================
+# HEALTH
+# =========================================================
+
+@app.route("/health")
+def health():
+
+    return jsonify({
+        "status": "ok",
+        "service": "RakshaCircle",
+        "ai": "OpenRouter"
+    })
+
+
+# =========================================================
+# ANALYZE
+# =========================================================
 
 @app.route(
     "/api/analyze",
     methods=["POST"]
 )
-def api_analyze():
+def analyze():
 
-    message = request.form.get(
-        "message",
-        ""
-    ).strip()
+    try:
 
-    link = request.form.get(
-        "link",
-        ""
-    ).strip()
+        message = request.form.get(
+            "message",
+            ""
+        ).strip()
 
-    files = request.files.getlist(
-        "attachments"
-    )
+        link = request.form.get(
+            "link",
+            ""
+        ).strip()
 
-
-    # --------------------------------------------------------
-    # EMPTY INPUT
-    # --------------------------------------------------------
-
-    if (
-        not message
-        and not link
-        and not files
-    ):
-
-        return jsonify({
-
-            "error":
-                "Message, link, image, "
-                "screenshot, or PDF is required."
-
-        }), 400
-
-
-    # --------------------------------------------------------
-    # INPUT LIMITS
-    # --------------------------------------------------------
-
-    if (
-        len(message) > 8000
-        or len(link) > 2000
-    ):
-
-        return jsonify({
-
-            "error":
-                "Input is too large."
-
-        }), 400
-
-
-    attachment_text = []
-
-    image_parts = []
-
-    names = []
-
-
-    # --------------------------------------------------------
-    # FILE PROCESSING
-    # --------------------------------------------------------
-
-    for f in files[:5]:
-
-        if not f or not f.filename:
-
-            continue
-
-
-        name = os.path.basename(
-            f.filename
+        uploaded_file = request.files.get(
+            "file"
         )
 
-        names.append(name)
+        image_data = None
 
+        input_parts = []
 
-        data = f.read()
+        if message:
 
-
-        # 10 MB max
-        if len(data) > (
-            10 * 1024 * 1024
-        ):
-
-            return jsonify({
-
-                "error":
-                    f"{name} is larger than 10 MB."
-
-            }), 400
-
-
-        ext = os.path.splitext(
-            name
-        )[1].lower()
-
-        mime = (
-            f.mimetype
-            or ""
-        )
-
-
-        # ----------------------------------------------------
-        # PDF
-        # ----------------------------------------------------
-
-        if (
-            ext == ".pdf"
-            or mime == "application/pdf"
-        ):
-
-            attachment_text.append(
-
-                f"[PDF: {name}]\n"
-                f"{extract_pdf_text(data)}"
-
+            input_parts.append(
+                f"User message:\n{message}"
             )
 
+        if link:
 
-        # ----------------------------------------------------
-        # IMAGE
-        # ----------------------------------------------------
+            input_parts.append(
+                f"URL/link:\n{link}"
+            )
 
-        elif (
-            ext in {
+        if uploaded_file:
+
+            filename = (
+                uploaded_file.filename or ""
+            )
+
+            extension = os.path.splitext(
+                filename
+            )[1].lower()
+
+            if extension == ".pdf":
+
+                pdf_text = extract_pdf_text(
+                    uploaded_file
+                )
+
+                input_parts.append(
+                    f"PDF content:\n"
+                    f"{pdf_text[:20000]}"
+                )
+
+            elif extension in [
                 ".png",
                 ".jpg",
                 ".jpeg",
                 ".webp"
-            }
-            or mime.startswith("image/")
-        ):
+            ]:
 
-            image_parts.append({
+                raw = uploaded_file.read()
 
-                "data":
-                    base64.b64encode(
-                        data
-                    ).decode("ascii"),
+                encoded = base64.b64encode(
+                    raw
+                ).decode("utf-8")
 
-                "mime_type":
-                    mime or "image/jpeg"
+                mime = (
+                    "image/png"
+                    if extension == ".png"
+                    else "image/webp"
+                    if extension == ".webp"
+                    else "image/jpeg"
+                )
 
-            })
+                image_data = (
+                    f"data:{mime};base64,{encoded}"
+                )
 
+                input_parts.append(
+                    "Analyze the attached image "
+                    "for scam/phishing indicators."
+                )
 
-        # ----------------------------------------------------
-        # OTHER FILE
-        # ----------------------------------------------------
+            else:
 
-        else:
+                text = uploaded_file.read().decode(
+                    "utf-8",
+                    errors="ignore"
+                )
 
-            attachment_text.append(
+                input_parts.append(
+                    f"Uploaded file content:\n"
+                    f"{text[:20000]}"
+                )
 
-                f"[Attachment: {name}] "
-                "Unsupported file type; "
-                "filename was supplied."
+        if not input_parts:
 
-            )
+            return jsonify({
+                "error": (
+                    "Please enter a message, "
+                    "link, or upload a file."
+                )
+            }), 400
 
-
-    # --------------------------------------------------------
-    # AI ANALYSIS
-    # --------------------------------------------------------
-
-    try:
-
-        result = analyze_with_openrouter(
-
-            message,
-            link,
-            "\n".join(
-                attachment_text
-            ),
-            image_parts
-
+        final_content = "\n\n".join(
+            input_parts
         )
 
-    except Exception as exc:
+        result = analyze_with_openrouter(
+            final_content,
+            image_data=image_data
+        )
 
-        return jsonify({
-
-            "error":
-                f"AI analysis failed: {exc}"
-
-        }), 502
-
-
-    # --------------------------------------------------------
-    # NORMALIZE SCORE
-    # --------------------------------------------------------
-
-    try:
+        score = int(
+            result.get("score", 0)
+        )
 
         score = max(
             0,
-            min(
-                100,
-                int(
-                    result.get(
-                        "risk_score",
-                        0
-                    )
-                    or 0
+            min(100, score)
+        )
+
+        result["score"] = score
+
+        if score >= 80:
+            result["risk"] = "Scam"
+
+        elif score >= 60:
+            result["risk"] = "High Risk"
+
+        elif score >= 30:
+            result["risk"] = "Suspicious"
+
+        else:
+            result["risk"] = "Safe"
+
+        result.setdefault(
+            "language",
+            "English"
+        )
+
+        result.setdefault(
+            "evidence",
+            []
+        )
+
+        result.setdefault(
+            "red_flags",
+            []
+        )
+
+        result.setdefault(
+            "explanation",
+            "No detailed explanation was returned."
+        )
+
+        result.setdefault(
+            "action",
+            (
+                "Do not share personal "
+                "or financial information."
+            )
+        )
+
+        # -------------------------------------------------
+        # SAVE SCAN HISTORY
+        # -------------------------------------------------
+
+        conn = get_db()
+
+        conn.execute(
+            """
+            INSERT INTO scans
+            (
+                input_type,
+                content,
+                score,
+                risk,
+                language,
+                explanation,
+                action,
+                evidence,
+                red_flags
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "image" if image_data else "text",
+                final_content[:10000],
+                result["score"],
+                result["risk"],
+                result["language"],
+                result["explanation"],
+                result["action"],
+                json.dumps(
+                    result["evidence"],
+                    ensure_ascii=False
+                ),
+                json.dumps(
+                    result["red_flags"],
+                    ensure_ascii=False
                 )
             )
         )
 
-    except (
-        TypeError,
-        ValueError
-    ):
+        conn.commit()
+        conn.close()
 
-        score = 50
+        # -------------------------------------------------
+        # FAMILY PROTECTION
+        # -------------------------------------------------
 
-
-    # --------------------------------------------------------
-    # FAMILY ALERT
-    # --------------------------------------------------------
-
-    alerted = False
-
-    sms_sent = 0
-
-
-    if score >= 70:
-
-        alerted, sms_sent = alert_family(
-            score
+        alert = send_family_alert(
+            result
         )
 
+        result["family_alert"] = alert
 
-    # --------------------------------------------------------
-    # SAVE HISTORY
-    # --------------------------------------------------------
+        return jsonify(result)
 
-    db = get_db()
+    except Exception as e:
 
-
-    db.execute(
-
-        """
-        INSERT INTO scan_history
-        (
-            user_id,
-            message_snippet,
-            attachment_names,
-            link,
-            risk_score,
-            risk_label,
-            language_detected,
-            alerted_family,
-            created_at
+        print(
+            "ANALYZE ERROR:",
+            str(e)
         )
 
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-
-        (
-            LOCAL_USER_ID,
-
-            message[:200],
-
-            json.dumps(names),
-
-            link,
-
-            score,
-
-            result.get(
-                "risk_label",
-                "Suspicious"
-            ),
-
-            result.get(
-                "language_detected",
-                "Unknown"
-            ),
-
-            1 if alerted else 0,
-
-            now()
-        )
-
-    )
+        return jsonify({
+            "error": str(e)
+        }), 500
 
 
-    db.commit()
-
-
-    # --------------------------------------------------------
-    # FINAL RESPONSE
-    # --------------------------------------------------------
-
-    result["risk_score"] = score
-
-    result["family_alerted"] = alerted
-
-    result["sms_sent"] = sms_sent
-
-    result["family_notified"] = alerted
-
-    result["attachments"] = names
-
-    result["links_found"] = find_urls(
-
-        message
-        + " "
-        + link
-        + " "
-        + "\n".join(
-            attachment_text
-        )
-
-    )
-
-
-    return jsonify(result)
-
-
-# ============================================================
-# FAMILY MEMBERS - GET
-# ============================================================
+# =========================================================
+# FAMILY - GET
+# =========================================================
 
 @app.route(
     "/api/family",
@@ -970,29 +836,40 @@ def api_analyze():
 )
 def get_family():
 
-    rows = get_db().execute(
+    try:
 
-        """
-        SELECT *
-        FROM family_members
-        WHERE user_id=?
-        ORDER BY created_at DESC
-        """,
+        conn = get_db()
 
-        (LOCAL_USER_ID,)
+        members = conn.execute(
+            """
+            SELECT
+                id,
+                name,
+                relation,
+                phone,
+                email
+            FROM family_members
+            ORDER BY id DESC
+            """
+        ).fetchall()
 
-    ).fetchall()
+        conn.close()
+
+        return jsonify([
+            dict(member)
+            for member in members
+        ])
+
+    except Exception as e:
+
+        return jsonify({
+            "error": str(e)
+        }), 500
 
 
-    return jsonify([
-        dict(row)
-        for row in rows
-    ])
-
-
-# ============================================================
-# FAMILY MEMBERS - ADD
-# ============================================================
+# =========================================================
+# FAMILY - ADD
+# =========================================================
 
 @app.route(
     "/api/family",
@@ -1000,99 +877,71 @@ def get_family():
 )
 def add_family():
 
-    data = request.get_json(
-        silent=True
-    ) or {}
+    try:
 
+        data = request.get_json(
+            silent=True
+        ) or {}
 
-    name = str(
-        data.get(
-            "name",
-            ""
+        name = str(
+            data.get("name", "")
+        ).strip()
+
+        relation = str(
+            data.get("relation", "")
+        ).strip()
+
+        phone = str(
+            data.get("phone", "")
+        ).strip()
+
+        email = str(
+            data.get("email", "")
+        ).strip()
+
+        if not name:
+
+            return jsonify({
+                "error": "Name is required."
+            }), 400
+
+        conn = get_db()
+
+        cursor = conn.execute(
+            """
+            INSERT INTO family_members
+            (name, relation, phone, email)
+            VALUES (?, ?, ?, ?)
+            """,
+            (
+                name,
+                relation,
+                phone,
+                email
+            )
         )
-    ).strip()
 
+        conn.commit()
 
-    phone = str(
-        data.get(
-            "phone",
-            ""
-        )
-    ).strip()
+        member_id = cursor.lastrowid
 
-
-    relation = str(
-        data.get(
-            "relation",
-            ""
-        )
-    ).strip()
-
-
-    if not name or not phone:
+        conn.close()
 
         return jsonify({
+            "success": True,
+            "id": member_id
+        })
 
-            "error":
-                "Name and phone number "
-                "are required."
+    except Exception as e:
 
-        }), 400
-
-
-    db = get_db()
-
-
-    cur = db.execute(
-
-        """
-        INSERT INTO family_members
-        (
-            user_id,
-            name,
-            relation,
-            phone,
-            created_at
-        )
-
-        VALUES (?, ?, ?, ?, ?)
-        """,
-
-        (
-            LOCAL_USER_ID,
-            name,
-            relation,
-            phone,
-            now()
-        )
-
-    )
+        return jsonify({
+            "error": str(e)
+        }), 500
 
 
-    db.commit()
-
-
-    row = db.execute(
-
-        """
-        SELECT *
-        FROM family_members
-        WHERE id=?
-        """,
-
-        (cur.lastrowid,)
-
-    ).fetchone()
-
-
-    return jsonify(
-        dict(row)
-    ), 201
-
-
-# ============================================================
-# FAMILY MEMBER - DELETE
-# ============================================================
+# =========================================================
+# FAMILY - DELETE
+# =========================================================
 
 @app.route(
     "/api/family/<int:member_id>",
@@ -1100,128 +949,109 @@ def add_family():
 )
 def delete_family(member_id):
 
-    db = get_db()
+    try:
 
+        conn = get_db()
 
-    db.execute(
-
-        """
-        DELETE FROM family_members
-        WHERE id=?
-        AND user_id=?
-        """,
-
-        (
-            member_id,
-            LOCAL_USER_ID
+        conn.execute(
+            """
+            DELETE FROM family_members
+            WHERE id = ?
+            """,
+            (member_id,)
         )
 
-    )
+        conn.commit()
+        conn.close()
+
+        return jsonify({
+            "success": True
+        })
+
+    except Exception as e:
+
+        return jsonify({
+            "error": str(e)
+        }), 500
 
 
-    db.commit()
-
-
-    return jsonify({
-
-        "deleted":
-            member_id
-
-    })
-
-
-# ============================================================
+# =========================================================
 # HISTORY
-# ============================================================
+# =========================================================
 
 @app.route(
-    "/api/history"
+    "/api/history",
+    methods=["GET"]
 )
 def history():
 
-    rows = get_db().execute(
+    try:
 
-        """
-        SELECT
-            id,
-            message_snippet,
-            attachment_names,
-            link,
-            risk_score,
-            risk_label,
-            language_detected,
-            alerted_family,
-            created_at
+        conn = get_db()
 
-        FROM scan_history
+        rows = conn.execute(
+            """
+            SELECT *
+            FROM scans
+            ORDER BY id DESC
+            LIMIT 50
+            """
+        ).fetchall()
 
-        WHERE user_id=?
+        conn.close()
 
-        ORDER BY created_at DESC
+        output = []
 
-        LIMIT 30
-        """,
+        for row in rows:
 
-        (LOCAL_USER_ID,)
+            item = dict(row)
 
-    ).fetchall()
+            try:
 
+                item["evidence"] = json.loads(
+                    item["evidence"] or "[]"
+                )
 
-    return jsonify([
-        dict(row)
-        for row in rows
-    ])
+            except Exception:
 
+                item["evidence"] = []
 
-# ============================================================
-# HEALTH CHECK
-# ============================================================
+            try:
 
-@app.route("/health")
-def health():
+                item["red_flags"] = json.loads(
+                    item["red_flags"] or "[]"
+                )
 
-    return jsonify({
+            except Exception:
 
-        "status":
-            "ok",
+                item["red_flags"] = []
 
-        "ai_configured":
-            bool(
-                OPENROUTER_API_KEY
-            ),
+            output.append(item)
 
-        "model":
-            MODEL_NAME,
+        return jsonify(output)
 
-        "login_required":
-            False
+    except Exception as e:
 
-    })
+        return jsonify({
+            "error": str(e)
+        }), 500
 
 
-# ============================================================
-# INITIALIZE DATABASE
-# ============================================================
-
-init_db()
-
-
-# ============================================================
-# RUN APP
-# ============================================================
+# =========================================================
+# RUN
+# =========================================================
 
 if __name__ == "__main__":
 
+    port = int(
+        os.getenv(
+            "PORT",
+            "5000"
+        )
+    )
+
     app.run(
-
         host="0.0.0.0",
-
-        port=int(
-            os.environ.get(
-                "PORT",
-                5000
-            )
-        ),
-
+        port=port,
         debug=True
     )

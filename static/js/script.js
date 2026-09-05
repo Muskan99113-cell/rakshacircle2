@@ -1,34 +1,1097 @@
-const $=id=>document.getElementById(id);
-const tabs=document.querySelectorAll(".tab");
-const panels={analyze:$("panel-analyze"),family:$("panel-family"),history:$("panel-history")};
-tabs.forEach(t=>t.addEventListener("click",()=>{tabs.forEach(x=>x.classList.remove("is-active"));t.classList.add("is-active");Object.values(panels).forEach(p=>p.classList.remove("is-active"));panels[t.dataset.tab].classList.add("is-active");if(t.dataset.tab==="family")loadFamily();if(t.dataset.tab==="history")loadHistory();}));
+document.addEventListener("DOMContentLoaded", () => {
 
-const msg=$("message-input"), files=$("attachments"), link=$("link-input"), fileList=$("file-list");
-msg.addEventListener("input",()=>{$("char-count").textContent=msg.value.length});
-files.addEventListener("change",()=>{fileList.innerHTML="";[...files.files].slice(0,5).forEach(f=>{const d=document.createElement("div");d.className="file-pill";d.textContent=`${f.type==="application/pdf"?"📄":"🖼️"} ${f.name}`;fileList.appendChild(d)})});
+    /* =====================================================
+       TAB NAVIGATION
+    ===================================================== */
 
-function state(s){$("result-empty").hidden=s!=="empty";$("result-loading").hidden=s!=="loading";$("result-error").hidden=s!=="error";$("result-content").hidden=s!=="content";}
-$("analyze-form").addEventListener("submit",async e=>{
- e.preventDefault(); if(!msg.value.trim()&&!link.value.trim()&&!files.files.length)return;
- const fd=new FormData();fd.append("message",msg.value);fd.append("link",link.value);[...files.files].slice(0,5).forEach(f=>fd.append("attachments",f));
- const btn=$("analyze-btn");btn.disabled=true;btn.classList.add("is-loading");state("loading");
- try{const r=await fetch("/api/analyze",{method:"POST",body:fd});const data=await r.json();if(!r.ok){$("result-error").textContent=data.error||"Analysis failed.";state("error");return}render(data);state("content")}catch(err){$("result-error").textContent="Server se connect nahi ho pa raha. Check that Flask is running.";state("error")}finally{btn.disabled=false;btn.classList.remove("is-loading")}
+    const navItems = document.querySelectorAll(".nav-item[data-tab]");
+
+    const panels = {
+        analyze: document.getElementById("panel-analyze"),
+        family: document.getElementById("panel-family"),
+        history: document.getElementById("panel-history")
+    };
+
+    function activateTab(tab) {
+
+        navItems.forEach(item => {
+            item.classList.toggle(
+                "is-active",
+                item.dataset.tab === tab
+            );
+        });
+
+        Object.entries(panels).forEach(([key, panel]) => {
+
+            if (!panel) return;
+
+            panel.hidden = key !== tab;
+        });
+
+        if (tab === "family") {
+            loadFamily();
+        }
+
+        if (tab === "history") {
+            loadHistory();
+        }
+    }
+
+    navItems.forEach(item => {
+
+        item.addEventListener("click", () => {
+            activateTab(item.dataset.tab);
+        });
+
+    });
+
+
+    /* =====================================================
+       ANALYZE FORM
+    ===================================================== */
+
+    const form = document.getElementById("analyze-form");
+    const button = document.getElementById("analyze-btn");
+
+    const messageInput = document.getElementById("message-input");
+    const linkInput = document.getElementById("link-input");
+    const attachmentInput = document.getElementById("attachments");
+
+    const charCount = document.getElementById("char-count");
+    const fileList = document.getElementById("file-list");
+
+    const stateEls = {
+        empty: document.getElementById("result-empty"),
+        loading: document.getElementById("result-loading"),
+        error: document.getElementById("result-error"),
+        content: document.getElementById("result-content")
+    };
+
+
+    /* =====================================================
+       RESULT STATES
+    ===================================================== */
+
+    function showState(name) {
+
+        Object.entries(stateEls).forEach(([key, el]) => {
+
+            if (!el) return;
+
+            const active = key === name;
+
+            el.hidden = !active;
+            el.style.display = active ? "" : "none";
+        });
+
+        const target = stateEls[name];
+
+        if (target && name !== "empty") {
+
+            requestAnimationFrame(() => {
+                scrollToElement(target, 90);
+            });
+
+        }
+    }
+
+
+    function scrollToElement(el, offset) {
+
+        if (!el) return;
+
+        const rect = el.getBoundingClientRect();
+
+        const targetY =
+            window.scrollY +
+            rect.top -
+            offset;
+
+        window.scrollTo({
+            top: Math.max(targetY, 0),
+            behavior: "smooth"
+        });
+    }
+
+
+    window.state = showState;
+
+
+    /* =====================================================
+       CHARACTER COUNT
+    ===================================================== */
+
+    if (messageInput && charCount) {
+
+        messageInput.addEventListener("input", () => {
+
+            charCount.textContent =
+                messageInput.value.length;
+
+        });
+
+    }
+
+
+    /* =====================================================
+       FILE DISPLAY
+    ===================================================== */
+
+    if (attachmentInput && fileList) {
+
+        attachmentInput.addEventListener("change", () => {
+
+            const files =
+                Array.from(
+                    attachmentInput.files || []
+                );
+
+            fileList.innerHTML = files.length
+
+                ? files
+                    .map(file =>
+                        `<div>${escapeHtml(file.name)}</div>`
+                    )
+                    .join("")
+
+                : "";
+
+        });
+
+    }
+
+
+    /* =====================================================
+       ANALYZE FORM SUBMIT
+    ===================================================== */
+
+    if (form) {
+
+        form.addEventListener(
+            "submit",
+            async (event) => {
+
+                event.preventDefault();
+
+                const message =
+                    messageInput?.value.trim() || "";
+
+                const link =
+                    linkInput?.value.trim() || "";
+
+                const files =
+                    attachmentInput?.files || [];
+
+
+                if (!message && !link && !files.length) {
+
+                    showFormError(
+                        "Please enter a message, suspicious link, or upload a file."
+                    );
+
+                    return;
+                }
+
+
+                if (button) {
+                    button.disabled = true;
+                }
+
+                showState("loading");
+
+
+                const formData =
+                    new FormData();
+
+                formData.append(
+                    "message",
+                    message
+                );
+
+                formData.append(
+                    "link",
+                    link
+                );
+
+
+                if (files.length > 0) {
+
+                    formData.append(
+                        "file",
+                        files[0]
+                    );
+
+                }
+
+
+                try {
+
+                    const response =
+                        await fetch(
+                            "/api/analyze",
+                            {
+                                method: "POST",
+                                body: formData
+                            }
+                        );
+
+
+                    const raw =
+                        await response.text();
+
+                    let data;
+
+
+                    try {
+
+                        data =
+                            JSON.parse(raw);
+
+                    } catch {
+
+                        throw new Error(
+                            "Server returned an invalid response."
+                        );
+
+                    }
+
+
+                    if (!response.ok) {
+
+                        throw new Error(
+                            data.error ||
+                            data.message ||
+                            `Analysis failed (${response.status})`
+                        );
+
+                    }
+
+
+                    renderResult(data);
+
+
+                } catch (err) {
+
+                    console.error(
+                        "RakshaCircle scan error:",
+                        err
+                    );
+
+                    showFormError(
+                        err.message ||
+                        "Please check your connection and try again."
+                    );
+
+
+                } finally {
+
+                    if (button) {
+                        button.disabled = false;
+                    }
+
+                }
+
+            }
+        );
+
+    }
+
+
+    /* =====================================================
+       FORM ERROR
+    ===================================================== */
+
+    function showFormError(message) {
+
+        showState("error");
+
+        const errorText =
+            stateEls.error?.querySelector("p");
+
+        if (errorText) {
+
+            errorText.textContent =
+                message;
+
+        }
+
+    }
+
+
+    /* =====================================================
+       RISK COLOR
+    ===================================================== */
+
+    function riskColor(score) {
+
+        if (score >= 60) {
+            return "#dc3d4b";
+        }
+
+        if (score >= 30) {
+            return "#d88a00";
+        }
+
+        return "#169b62";
+    }
+
+
+    /* =====================================================
+       RENDER ANALYSIS RESULT
+    ===================================================== */
+
+    function renderResult(data) {
+
+        const score =
+            Math.max(
+                0,
+                Math.min(
+                    100,
+                    Number(data.score) || 0
+                )
+            );
+
+
+        const risk =
+            data.risk || "Safe";
+
+
+        const language =
+            data.language || "Unknown";
+
+
+        const evidence =
+            Array.isArray(data.evidence)
+                ? data.evidence
+                : [];
+
+
+        const flags =
+            Array.isArray(data.red_flags)
+                ? data.red_flags
+                : [];
+
+
+        const explanation =
+            data.explanation ||
+            "No detailed explanation was returned.";
+
+
+        const action =
+            data.action ||
+            "Do not share personal or financial information.";
+
+
+        const color =
+            riskColor(score);
+
+
+        const scoreNumber =
+            document.getElementById(
+                "score-number"
+            );
+
+
+        const meterFill =
+            document.getElementById(
+                "meter-fill"
+            );
+
+
+        const riskLabel =
+            document.getElementById(
+                "risk-label"
+            );
+
+
+        const langDetected =
+            document.getElementById(
+                "lang-detected"
+            );
+
+
+        const evidenceEl =
+            document.getElementById(
+                "evidence"
+            );
+
+
+        const flagsEl =
+            document.getElementById(
+                "flags-list"
+            );
+
+
+        const explanationEl =
+            document.getElementById(
+                "explanation-text"
+            );
+
+
+        const actionEl =
+            document.getElementById(
+                "action-text"
+            );
+
+
+        const alertTag =
+            document.getElementById(
+                "alert-tag"
+            );
+
+
+        if (scoreNumber) {
+
+            scoreNumber.textContent =
+                score;
+
+        }
+
+
+        if (meterFill) {
+
+            const circumference =
+                326.7;
+
+            const offset =
+                circumference -
+                (
+                    circumference *
+                    score /
+                    100
+                );
+
+
+            meterFill.style.stroke =
+                color;
+
+            meterFill.style.strokeDashoffset =
+                offset;
+
+        }
+
+
+        if (riskLabel) {
+
+            riskLabel.textContent =
+                risk;
+
+            riskLabel.style.color =
+                color;
+
+        }
+
+
+        if (langDetected) {
+
+            langDetected.textContent =
+                language;
+
+        }
+
+
+        if (evidenceEl) {
+
+            evidenceEl.innerHTML =
+                evidence.length
+
+                    ? evidence
+                        .map(item =>
+                            `<span>${escapeHtml(String(item))}</span>`
+                        )
+                        .join("")
+
+                    : `<span>No specific evidence extracted.</span>`;
+
+        }
+
+
+        if (flagsEl) {
+
+            flagsEl.innerHTML =
+                flags.length
+
+                    ? flags
+                        .map(item =>
+                            `<li>${escapeHtml(String(item))}</li>`
+                        )
+                        .join("")
+
+                    : `<li>No specific red flags detected.</li>`;
+
+        }
+
+
+        if (explanationEl) {
+
+            explanationEl.textContent =
+                explanation;
+
+        }
+
+
+        if (actionEl) {
+
+            actionEl.textContent =
+                action;
+
+        }
+
+
+        if (alertTag) {
+
+            const familyAlert =
+                data.family_alert;
+
+
+            const triggered =
+                score >= 70 ||
+                Boolean(
+                    familyAlert &&
+                    familyAlert.sent
+                );
+
+
+            alertTag.hidden =
+                !triggered;
+
+        }
+
+
+        showState("content");
+
+    }
+
+
+    /* =====================================================
+       FAMILY CIRCLE
+    ===================================================== */
+
+    const familyForm =
+        document.getElementById(
+            "family-form"
+        );
+
+
+    const familyList =
+        document.getElementById(
+            "family-list"
+        );
+
+
+    const familyEmpty =
+        document.getElementById(
+            "family-empty"
+        );
+
+
+    /* =====================================================
+       LOAD FAMILY MEMBERS
+    ===================================================== */
+
+    async function loadFamily() {
+
+        if (!familyList) return;
+
+
+        try {
+
+            const response =
+                await fetch(
+                    "/api/family"
+                );
+
+
+            if (!response.ok) {
+
+                throw new Error(
+                    `Failed to load family members (${response.status})`
+                );
+
+            }
+
+
+            const members =
+                await response.json();
+
+
+            if (
+                !Array.isArray(members) ||
+                members.length === 0
+            ) {
+
+                familyList.innerHTML = "";
+
+                if (familyEmpty) {
+                    familyEmpty.hidden = false;
+                }
+
+                return;
+
+            }
+
+
+            if (familyEmpty) {
+                familyEmpty.hidden = true;
+            }
+
+
+            familyList.innerHTML =
+                members
+                    .map(member => `
+
+                        <li>
+
+                            <strong>
+                                ${escapeHtml(member.name)}
+                            </strong>
+
+                            ${
+                                member.relation
+                                    ? `<span> · ${escapeHtml(member.relation)}</span>`
+                                    : ""
+                            }
+
+                            <div>
+
+                                ${
+                                    member.phone
+                                        ? `<small>${escapeHtml(member.phone)}</small>`
+                                        : ""
+                                }
+
+                                ${
+                                    member.email
+                                        ? `<small>${escapeHtml(member.email)}</small>`
+                                        : ""
+                                }
+
+                            </div>
+
+                            <button
+                                type="button"
+                                class="secondary-btn"
+                                data-delete="${member.id}"
+                            >
+                                Remove
+                            </button>
+
+                        </li>
+
+                    `)
+                    .join("");
+
+
+            /* DELETE BUTTONS */
+
+            familyList
+                .querySelectorAll(
+                    "[data-delete]"
+                )
+                .forEach(button => {
+
+                    button.addEventListener(
+                        "click",
+                        async () => {
+
+                            const id =
+                                button.dataset.delete;
+
+
+                            try {
+
+                                const response =
+                                    await fetch(
+                                        `/api/family/${id}`,
+                                        {
+                                            method: "DELETE"
+                                        }
+                                    );
+
+
+                                const data =
+                                    await response.json();
+
+
+                                if (!response.ok) {
+
+                                    throw new Error(
+                                        data.error ||
+                                        "Failed to remove family member."
+                                    );
+
+                                }
+
+
+                                await loadFamily();
+
+
+                            } catch (err) {
+
+                                console.error(
+                                    "Delete family member error:",
+                                    err
+                                );
+
+
+                                alert(
+                                    "Could not remove family member: " +
+                                    err.message
+                                );
+
+                            }
+
+                        }
+                    );
+
+                });
+
+
+        } catch (err) {
+
+            console.error(
+                "RakshaCircle: failed to load family circle.",
+                err
+            );
+
+
+            familyList.innerHTML = `
+                <li>
+                    Could not load family members.
+                </li>
+            `;
+
+        }
+
+    }
+
+
+    /* =====================================================
+       ADD FAMILY MEMBER
+    ===================================================== */
+
+    if (familyForm) {
+
+        familyForm.addEventListener(
+            "submit",
+            async (event) => {
+
+                event.preventDefault();
+
+
+                const name =
+                    document
+                        .getElementById(
+                            "member-name"
+                        )
+                        ?.value
+                        .trim() || "";
+
+
+                const relation =
+                    document
+                        .getElementById(
+                            "member-relation"
+                        )
+                        ?.value
+                        .trim() || "";
+
+
+                const phone =
+                    document
+                        .getElementById(
+                            "member-phone"
+                        )
+                        ?.value
+                        .trim() || "";
+
+
+                const email =
+                    document
+                        .getElementById(
+                            "member-email"
+                        )
+                        ?.value
+                        .trim() || "";
+
+
+                if (!name) {
+
+                    alert(
+                        "Please enter family member name."
+                    );
+
+                    return;
+
+                }
+
+
+                /* BUTTON */
+
+                const submitButton =
+                    familyForm.querySelector(
+                        'button[type="submit"]'
+                    );
+
+
+                if (submitButton) {
+
+                    submitButton.disabled =
+                        true;
+
+                    submitButton.dataset.originalText =
+                        submitButton.textContent;
+
+                    submitButton.textContent =
+                        "Adding...";
+
+                }
+
+
+                try {
+
+                    const response =
+                        await fetch(
+                            "/api/family",
+                            {
+                                method: "POST",
+
+                                headers: {
+                                    "Content-Type":
+                                        "application/json"
+                                },
+
+                                body:
+                                    JSON.stringify({
+                                        name:
+                                            name,
+
+                                        relation:
+                                            relation,
+
+                                        phone:
+                                            phone,
+
+                                        email:
+                                            email
+                                    })
+                            }
+                        );
+
+
+                    const data =
+                        await response.json();
+
+
+                    console.log(
+                        "Family API response:",
+                        data
+                    );
+
+
+                    if (!response.ok) {
+
+                        throw new Error(
+                            data.error ||
+                            data.message ||
+                            `Failed to add family member (${response.status})`
+                        );
+
+                    }
+
+
+                    /* SUCCESS */
+
+                    familyForm.reset();
+
+
+                    await loadFamily();
+
+
+                    alert(
+                        "Family member added successfully! ✅"
+                    );
+
+
+                } catch (err) {
+
+                    console.error(
+                        "RakshaCircle: failed to add family member.",
+                        err
+                    );
+
+
+                    alert(
+                        "Could not add family member:\n\n" +
+                        err.message
+                    );
+
+
+                } finally {
+
+                    if (submitButton) {
+
+                        submitButton.disabled =
+                            false;
+
+                        submitButton.textContent =
+                            submitButton.dataset.originalText ||
+                            "+ Add to family circle";
+
+                    }
+
+                }
+
+            }
+        );
+
+    }
+
+
+    /* =====================================================
+       SCAN HISTORY
+    ===================================================== */
+
+    const historyList =
+        document.getElementById(
+            "history-list"
+        );
+
+
+    async function loadHistory() {
+
+        if (!historyList) return;
+
+
+        historyList.innerHTML =
+            `<div class="history-loading">
+                Loading scan history...
+            </div>`;
+
+
+        try {
+
+            const response =
+                await fetch(
+                    "/api/history"
+                );
+
+
+            if (!response.ok) {
+
+                throw new Error(
+                    `Failed to load history (${response.status})`
+                );
+
+            }
+
+
+            const scans =
+                await response.json();
+
+
+            if (
+                !Array.isArray(scans) ||
+                scans.length === 0
+            ) {
+
+                historyList.innerHTML =
+                    `<div class="history-loading">
+                        No scans yet.
+                    </div>`;
+
+                return;
+
+            }
+
+
+            historyList.innerHTML =
+                scans
+                    .map(scan => `
+
+                        <div>
+
+                            <strong
+                                style="color:${riskColor(scan.score)}"
+                            >
+                                ${escapeHtml(scan.risk)}
+                                ·
+                                ${escapeHtml(scan.score)}/100
+                            </strong>
+
+                            <p>
+                                ${escapeHtml(
+                                    scan.explanation || ""
+                                )}
+                            </p>
+
+                            <small>
+                                ${escapeHtml(
+                                    scan.created_at || ""
+                                )}
+                            </small>
+
+                        </div>
+
+                    `)
+                    .join("");
+
+
+        } catch (err) {
+
+            console.error(
+                "RakshaCircle: failed to load history.",
+                err
+            );
+
+
+            historyList.innerHTML =
+                `<div class="history-loading">
+                    Couldn't load scan history.
+                </div>`;
+
+        }
+
+    }
+
+
+    /* =====================================================
+       HTML ESCAPE
+    ===================================================== */
+
+    function escapeHtml(value) {
+
+        return String(
+            value ?? ""
+        )
+            .replace(
+                /&/g,
+                "&amp;"
+            )
+            .replace(
+                /</g,
+                "&lt;"
+            )
+            .replace(
+                />/g,
+                "&gt;"
+            )
+            .replace(
+                /"/g,
+                "&quot;"
+            )
+            .replace(
+                /'/g,
+                "&#039;"
+            );
+
+    }
+
+
+    /* =====================================================
+       INITIAL STATE
+    ===================================================== */
+
+    showState("empty");
+
 });
-function render(d){
- const score=Math.max(0,Math.min(100,Math.round(d.risk_score||0))), c=score>=70?"var(--danger)":score>=35?"var(--warn)":"var(--safe)";
- $("score-number").textContent=score;$("risk-label").textContent=d.risk_label||"—";$("risk-label").style.color=c;$("lang-detected").textContent=d.language_detected||"—";
- const circ=326.7, meter=$("meter-fill");meter.style.stroke=c;meter.style.strokeDashoffset=circ-(circ*score/100);
- $("alert-tag").hidden=!d.family_alerted;
- const ev=[];(d.attachments||[]).forEach(x=>ev.push(`📎 ${x}`));(d.links_found||[]).forEach(x=>ev.push(`🔗 ${x}`));$("evidence").innerHTML=ev.length?`<b>Checked:</b> ${ev.map(x=>`<span>${escapeHtml(x)}</span>`).join(" ")}`:"";
- const ul=$("flags-list");ul.innerHTML="";(d.red_flags||[]).forEach(f=>{const li=document.createElement("li");li.innerHTML=`<strong>${escapeHtml(f.phrase||"")}</strong> — ${escapeHtml(f.reason||"")}`;ul.appendChild(li)});
- $("explanation-text").textContent=d.explanation||"";$("action-text").textContent=d.suggested_action||"";
-}
-function escapeHtml(s){return String(s).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]))}
-
-const familyForm=$("family-form");
-async function loadFamily(){const r=await fetch("/api/family");if(r.status===401)return;renderFamily(await r.json())}
-function renderFamily(ms){$("family-list").innerHTML="";$("family-empty").style.display=ms.length?"none":"block";ms.forEach(m=>{const li=document.createElement("li");li.innerHTML=`<div><b>${escapeHtml(m.name)}</b><small>${escapeHtml([m.relation,m.phone].filter(Boolean).join(" · "))}</small></div>`;const b=document.createElement("button");b.className="remove-btn";b.textContent="Remove";b.onclick=async()=>{await fetch(`/api/family/${m.id}`,{method:"DELETE"});loadFamily()};li.appendChild(b);$("family-list").appendChild(li)})}
-familyForm.addEventListener("submit",async e=>{e.preventDefault();const body={name:$("member-name").value.trim(),relation:$("member-relation").value.trim(),phone:$("member-phone").value.trim()};const r=await fetch("/api/family",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});if(r.ok){familyForm.reset();loadFamily()}else alert((await r.json()).error||"Could not add contact")});
-
-async function loadHistory(){const box=$("history-list");box.innerHTML="<p>Loading…</p>";const r=await fetch("/api/history");const rows=await r.json();if(!rows.length){box.innerHTML="<p class='family-empty' style='display:block'>No scans yet.</p>";return}box.innerHTML=rows.map(x=>`<div class="history-card"><div><b>${escapeHtml(x.risk_label||"—")}</b><small>${new Date(x.created_at).toLocaleString()} · score ${x.risk_score}</small></div><p>${escapeHtml(x.message_snippet||"(attachment/link scan)")}</p><span>${x.attachment_names&&x.attachment_names!=="[]"?"📎 attachment":""} ${x.link?"🔗 link":""}</span></div>`).join("")}
-state("empty");

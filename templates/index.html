@@ -1,55 +1,1440 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
-<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>RakshaCircle — Family Scam Shield</title>
-<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Noto+Sans+Devanagari:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <meta
+        name="description"
+        content="RakshaCircle — AI-powered scam detection and family protection"
+    >
+
+    <title>RakshaCircle | AI Scam Protection</title>
+
+    <link
+        rel="stylesheet"
+        href="{{ url_for('static', filename='css/style.css') }}"
+    >
 </head>
+
+
 <body>
-<header class="topbar"><div class="topbar-inner">
-  <div class="brand"><span class="brand-shield">🛡️</span><span class="brand-name">Raksha<em>Circle</em></span></div>
-  <nav class="tabs"><button class="tab is-active" data-tab="analyze">Check a message</button><button class="tab" data-tab="family">Family circle</button><button class="tab" data-tab="history">Scan history</button></nav>
-  <div class="user-area"><span>🛡️ Protected locally</span></div>
-</div></header>
-<main>
-<section class="panel is-active" id="panel-analyze"><div class="analyze-grid">
-<div class="input-col">
-<h1>Check messages, links, screenshots & PDFs before they cause trouble.</h1>
-<p class="lede">Paste the message or add a link, image/screenshot, or PDF. RakshaCircle checks the combined evidence and explains the risk in simple language.</p>
-<form id="analyze-form">
-<label class="field-label">Message text</label>
-<textarea id="message-input" name="message" placeholder="Yahan WhatsApp/SMS/email message paste karein..."></textarea>
-<div class="char-count"><span id="char-count">0</span> / 8000</div>
-<div class="attachment-grid">
-  <label class="upload-card"><span>📎</span><b>Add files</b><small>Images, screenshots, PDFs · max 5</small><input id="attachments" name="attachments" type="file" accept="image/png,image/jpeg,image/webp,application/pdf" multiple></label>
-  <div class="link-card"><label for="link-input">🔗 Link / URL</label><input id="link-input" name="link" type="url" placeholder="https://cybercrime.gov.in"></div>
-</div>
-<div id="file-list" class="file-list"></div>
-<button id="analyze-btn" type="submit" class="btn-primary"><span class="btn-label">Analyze safely</span><span class="btn-spinner"></span></button>
-</form>
-<div class="disclaimer-line">RakshaCircle is a defensive screening tool, not proof of a compromise. If money has already been sent, call <strong>1930</strong> immediately.</div>
-</div>
-<div class="result-col">
-<div id="result-empty" class="result-empty"><div class="big-icon">🔎</div><p>Your result will appear here.</p></div>
-<div id="result-loading" class="result-loading" hidden><div class="pulse-ring"></div><p>Reading the message and attachments…</p></div>
-<div id="result-error" class="result-error" hidden></div>
-<div id="result-content" hidden>
-<div class="score-row"><div class="meter-wrap"><svg viewBox="0 0 120 120" class="meter-svg"><circle cx="60" cy="60" r="52" class="meter-track"/><circle cx="60" cy="60" r="52" class="meter-fill" id="meter-fill"/></svg><div class="meter-number"><span id="score-number">0</span></div></div>
-<div class="score-meta"><div class="risk-label" id="risk-label">—</div><div class="lang-tag">Language: <span id="lang-detected">—</span></div><div class="alert-tag" id="alert-tag" hidden>Family alert triggered</div></div></div>
-<div class="evidence" id="evidence"></div>
-<div class="flags-block"><h2>What stood out</h2><ul id="flags-list"></ul></div>
-<div class="explain-block"><h2>In plain words</h2><p id="explanation-text"></p></div>
-<div class="action-block"><h2>What to do next</h2><p id="action-text"></p></div>
-</div></div></div></section>
 
-<section class="panel" id="panel-family"><div class="panel-inner">
-<h1>Family circle</h1><p class="lede">Add trusted people. For a high-risk result (70+), RakshaCircle creates an alert. Real SMS is optional through Twilio; without credentials it stays simulated.</p>
-<form id="family-form" class="family-form"><div class="form-row"><div class="form-field"><label>Name</label><input id="member-name" required placeholder="e.g. Mom"></div><div class="form-field"><label>Relation</label><input id="member-relation" placeholder="e.g. Mother"></div><div class="form-field"><label>Phone</label><input id="member-phone" required placeholder="+91..."></div></div><button class="btn-secondary">+ Add contact</button></form>
-<ul id="family-list" class="family-list"></ul><p id="family-empty" class="family-empty">No trusted contacts yet.</p></div></section>
+<!-- =========================================================
+     GOOGLE TRANSLATE HIDDEN CONTAINER
+========================================================= -->
 
-<section class="panel" id="panel-history"><div class="panel-inner"><h1>Recent scans</h1><p class="lede">Your scan history is private to your account.</p><div id="history-list" class="history-list"></div></div></section>
-</main>
-<footer class="site-footer"><p>RakshaCircle is a hackathon prototype. Never share OTPs, passwords or UPI PINs. In active cyber fraud, contact 1930 or <a href="https://cybercrime.gov.in" target="_blank" rel="noopener">cybercrime.gov.in</a>.</p></footer>
-<script src="{{ url_for('static', filename='js/script.js') }}"></script>
-</body></html>
+<div
+    id="google_translate_element"
+    style="display:none;"
+></div>
+
+
+<!-- =========================================================
+     APP SHELL
+========================================================= -->
+
+<div class="app-shell">
+
+
+    <!-- =====================================================
+         SIDEBAR
+    ====================================================== -->
+
+    <aside class="sidebar">
+
+        <div class="sidebar-top">
+
+            <!-- BRAND -->
+
+            <div class="brand">
+
+                <div class="brand-mark">
+                    <span>🛡</span>
+                </div>
+
+                <div class="brand-copy">
+
+                    <h1>
+                        RakshaCircle
+                    </h1>
+
+                    <p>
+                        Digital Safety Platform
+                    </p>
+
+                </div>
+
+            </div>
+
+
+            <!-- SECURITY STATUS -->
+
+            <div class="security-status">
+
+                <span class="status-dot"></span>
+
+                <div>
+                    <strong>
+                        Protection Active
+                    </strong>
+
+                    <small>
+                        AI monitoring ready
+                    </small>
+                </div>
+
+            </div>
+
+
+            <!-- NAVIGATION -->
+
+            <nav class="sidebar-nav">
+
+                <p class="nav-heading">
+                    PROTECTION
+                </p>
+
+
+                <button
+                    type="button"
+                    class="tab nav-item is-active"
+                    data-tab="analyze"
+                >
+
+                    <span class="nav-icon">
+                        🔍
+                    </span>
+
+                    <span>
+                        Check a Message
+                    </span>
+
+                </button>
+
+
+                <button
+                    type="button"
+                    class="tab nav-item"
+                    data-tab="family"
+                >
+
+                    <span class="nav-icon">
+                        👨‍👩‍👧
+                    </span>
+
+                    <span>
+                        Family Circle
+                    </span>
+
+                </button>
+
+
+                <button
+                    type="button"
+                    class="tab nav-item"
+                    data-tab="history"
+                >
+
+                    <span class="nav-icon">
+                        ◷
+                    </span>
+
+                    <span>
+                        Scan History
+                    </span>
+
+                </button>
+
+            </nav>
+
+        </div>
+
+
+        <!-- SIDEBAR BOTTOM -->
+
+        <div class="sidebar-bottom">
+
+            <div class="help-card">
+
+                <div class="help-icon">
+                    💡
+                </div>
+
+                <div>
+
+                    <strong>
+                        Stay protected
+                    </strong>
+
+                    <p>
+                        Never share OTPs,
+                        passwords or PINs.
+                    </p>
+
+                </div>
+
+            </div>
+
+            <div class="sidebar-footer">
+                RakshaCircle v1.0
+            </div>
+
+        </div>
+
+    </aside>
+
+
+
+    <!-- =====================================================
+         MAIN AREA
+    ====================================================== -->
+
+    <div class="main-area">
+
+
+        <!-- =================================================
+             TOP HEADER
+        ================================================== -->
+
+        <header class="top-header">
+
+            <div class="mobile-brand">
+
+                <div class="brand-mark">
+                    🛡
+                </div>
+
+                <strong>
+                    RakshaCircle
+                </strong>
+
+            </div>
+
+
+            <div class="header-spacer"></div>
+
+
+            <!-- LANGUAGE -->
+
+            <div class="language-control">
+
+                <span class="language-icon">
+                    🌐
+                </span>
+
+                <label
+                    for="languageSelect"
+                    class="sr-only"
+                >
+                    Language
+                </label>
+
+                <select
+                    id="languageSelect"
+                    class="language-select"
+                >
+
+                    <option value="">
+                        Language
+                    </option>
+
+                    <option value="en">
+                        English
+                    </option>
+
+                    <option value="hi">
+                        हिन्दी
+                    </option>
+
+                    <option value="mr">
+                        मराठी
+                    </option>
+
+                    <option value="ta">
+                        தமிழ்
+                    </option>
+
+                    <option value="te">
+                        తెలుగు
+                    </option>
+
+                    <option value="bn">
+                        বাংলা
+                    </option>
+
+                    <option value="gu">
+                        ગુજરાતી
+                    </option>
+
+                    <option value="kn">
+                        ಕನ್ನಡ
+                    </option>
+
+                    <option value="ml">
+                        മലയാളം
+                    </option>
+
+                    <option value="pa">
+                        ਪੰਜਾਬੀ
+                    </option>
+
+                    <option value="ur">
+                        اردو
+                    </option>
+
+                </select>
+
+            </div>
+
+        </header>
+
+
+
+        <!-- =================================================
+             CONTENT
+        ================================================== -->
+
+        <main class="content-area">
+
+
+            <!-- =================================================
+                 ANALYZE PANEL
+            ================================================== -->
+
+            <section
+                id="panel-analyze"
+                class="panel is-active"
+            >
+
+
+                <!-- PAGE INTRO -->
+
+                <div class="page-intro">
+
+                    <div>
+
+                        <div class="eyebrow">
+                            <span></span>
+                            REAL-TIME PROTECTION
+                        </div>
+
+                        <h2>
+                            Check before you trust.
+                        </h2>
+
+                        <p>
+                            Analyze suspicious messages, links,
+                            screenshots and documents with
+                            RakshaCircle AI.
+                        </p>
+
+                    </div>
+
+
+                    <div class="intro-badge">
+
+                        <span class="intro-badge-icon">
+                            ✦
+                        </span>
+
+                        <div>
+
+                            <strong>
+                                AI-powered analysis
+                            </strong>
+
+                            <small>
+                                Fast &amp; privacy-focused
+                            </small>
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+
+
+                <!-- =================================================
+                     ANALYSIS WORKSPACE
+                ================================================== -->
+
+                <div class="workspace-grid">
+
+
+                    <!-- LEFT: INPUT -->
+
+                    <div class="input-card card">
+
+                        <div class="card-header">
+
+                            <div>
+
+                                <h3>
+                                    What would you like to check?
+                                </h3>
+
+                                <p>
+                                    Paste the content or upload a
+                                    suspicious file.
+                                </p>
+
+                            </div>
+
+                            <span class="secure-badge">
+                                🔒 Secure
+                            </span>
+
+                        </div>
+
+
+                        <form
+                            id="analyze-form"
+                            enctype="multipart/form-data"
+                        >
+
+
+                            <!-- MESSAGE -->
+
+                            <div class="field">
+
+                                <div class="field-label-row">
+
+                                    <label for="message-input">
+                                        Suspicious message
+                                    </label>
+
+                                    <span
+                                        id="char-count"
+                                        class="char-count"
+                                    >
+                                        0
+                                    </span>
+
+                                </div>
+
+
+                                <textarea
+                                    id="message-input"
+                                    name="message"
+                                    rows="8"
+                                    maxlength="10000"
+                                    placeholder="Paste the suspicious SMS, WhatsApp message, email or social media text here..."
+                                ></textarea>
+
+                            </div>
+
+
+
+                            <!-- DIVIDER -->
+
+                            <div class="or-divider">
+
+                                <span>
+                                    OR
+                                </span>
+
+                            </div>
+
+
+
+                            <!-- LINK -->
+
+                            <div class="field">
+
+                                <label for="link-input">
+                                    Suspicious link
+                                </label>
+
+                                <div class="input-with-icon">
+
+                                    <span>
+                                        🔗
+                                    </span>
+
+                                    <input
+                                        id="link-input"
+                                        name="link"
+                                        type="url"
+                                        placeholder="https://example.com/..."
+                                        autocomplete="off"
+                                    >
+
+                                </div>
+
+                            </div>
+
+
+
+                            <!-- FILE UPLOAD -->
+
+                            <div class="field">
+
+                                <label>
+                                    Screenshot or document
+                                </label>
+
+
+                                <label
+                                    class="upload-zone"
+                                    for="attachments"
+                                >
+
+                                    <div class="upload-icon">
+                                        ↑
+                                    </div>
+
+                                    <div class="upload-copy">
+
+                                        <strong>
+                                            Upload a screenshot or PDF
+                                        </strong>
+
+                                        <span>
+                                            PNG, JPG, WEBP, PDF or TXT
+                                        </span>
+
+                                    </div>
+
+                                    <span class="upload-action">
+                                        Browse
+                                    </span>
+
+                                    <input
+                                        id="attachments"
+                                        name="attachments"
+                                        type="file"
+                                        accept=".png,.jpg,.jpeg,.webp,.pdf,.txt"
+                                        multiple
+                                    >
+
+                                </label>
+
+
+                                <div
+                                    id="file-list"
+                                    class="file-list"
+                                ></div>
+
+                            </div>
+
+
+
+                            <!-- ANALYZE BUTTON -->
+
+                            <button
+                                id="analyze-btn"
+                                type="submit"
+                                class="primary-btn analyze-button"
+                            >
+
+                                <span class="button-icon">
+                                    ✦
+                                </span>
+
+                                <span class="button-text">
+                                    Analyze for threats
+                                </span>
+
+                                <span class="button-arrow">
+                                    →
+                                </span>
+
+                            </button>
+
+
+                            <p class="privacy-note">
+
+                                🔒 Your content is analyzed securely
+                                and is not displayed publicly.
+
+                            </p>
+
+                        </form>
+
+                    </div>
+
+
+
+                    <!-- RIGHT: RESULT -->
+
+                    <div class="result-column">
+
+
+                        <!-- EMPTY STATE -->
+
+                        <div
+                            id="result-empty"
+                            class="result-card empty-result card"
+                        >
+
+                            <div class="empty-shield">
+                                🛡
+                            </div>
+
+                            <h3>
+                                Your safety check
+                            </h3>
+
+                            <p>
+                                Submit something suspicious and
+                                we'll explain exactly what we find.
+                            </p>
+
+
+                            <div class="detection-list">
+
+                                <div>
+                                    <span>✓</span>
+                                    Scam &amp; phishing indicators
+                                </div>
+
+                                <div>
+                                    <span>✓</span>
+                                    Urgency &amp; manipulation
+                                </div>
+
+                                <div>
+                                    <span>✓</span>
+                                    Suspicious links &amp; requests
+                                </div>
+
+                                <div>
+                                    <span>✓</span>
+                                    Actionable safety advice
+                                </div>
+
+                            </div>
+
+                        </div>
+
+
+
+                        <!-- LOADING -->
+
+                        <div
+                            id="result-loading"
+                            class="result-card loading-result card"
+                            hidden
+                        >
+
+                            <div class="loading-ring"></div>
+
+                            <h3>
+                                Analyzing content...
+                            </h3>
+
+                            <p>
+                                RakshaCircle AI is checking
+                                multiple scam indicators.
+                            </p>
+
+                            <div class="loading-steps">
+
+                                <span>
+                                    Checking content
+                                </span>
+
+                                <span>
+                                    Assessing risk
+                                </span>
+
+                                <span>
+                                    Preparing guidance
+                                </span>
+
+                            </div>
+
+                        </div>
+
+
+
+                        <!-- ERROR -->
+
+                        <div
+                            id="result-error"
+                            class="result-card error-result card"
+                            hidden
+                        >
+
+                            <div class="error-icon">
+                                !
+                            </div>
+
+                            <h3>
+                                Analysis couldn't be completed
+                            </h3>
+
+                            <p>
+                                Please check your connection
+                                and try again.
+                            </p>
+
+                            <button
+                                type="button"
+                                class="secondary-btn"
+                                onclick="state('empty')"
+                            >
+                                Try again
+                            </button>
+
+                        </div>
+
+
+
+                        <!-- =================================================
+                             ACTUAL RESULT
+                        ================================================== -->
+
+                        <div
+                            id="result-content"
+                            class="result-card actual-result card"
+                            hidden
+                        >
+
+
+                            <!-- RESULT HEADER -->
+
+                            <div class="result-heading">
+
+                                <div>
+
+                                    <div class="eyebrow">
+                                        SECURITY ASSESSMENT
+                                    </div>
+
+                                    <h3>
+                                        Analysis complete
+                                    </h3>
+
+                                </div>
+
+                                <div
+                                    id="alert-tag"
+                                    class="alert-tag"
+                                    hidden
+                                >
+                                    Alert triggered
+                                </div>
+
+                            </div>
+
+
+
+                            <!-- SCORE -->
+
+                            <div class="risk-overview">
+
+
+                                <div class="risk-meter">
+
+                                    <svg
+                                        viewBox="0 0 120 120"
+                                        class="score-circle"
+                                    >
+
+                                        <circle
+                                            cx="60"
+                                            cy="60"
+                                            r="52"
+                                            class="meter-track"
+                                        ></circle>
+
+                                        <circle
+                                            id="meter-fill"
+                                            cx="60"
+                                            cy="60"
+                                            r="52"
+                                            class="meter-fill"
+                                        ></circle>
+
+                                    </svg>
+
+
+                                    <div class="score-center">
+
+                                        <strong id="score-number">
+                                            0
+                                        </strong>
+
+                                        <span>
+                                            /100
+                                        </span>
+
+                                    </div>
+
+                                </div>
+
+
+                                <div class="risk-copy">
+
+                                    <span class="result-label">
+                                        RISK LEVEL
+                                    </span>
+
+                                    <h4 id="risk-label">
+                                        —
+                                    </h4>
+
+                                    <p>
+                                        Based on detected
+                                        scam indicators.
+                                    </p>
+
+
+                                    <div class="result-meta">
+
+                                        <div>
+
+                                            <span>
+                                                Detected language
+                                            </span>
+
+                                            <strong id="lang-detected">
+                                                —
+                                            </strong>
+
+                                        </div>
+
+                                    </div>
+
+                                </div>
+
+                            </div>
+
+
+
+                            <!-- EVIDENCE -->
+
+                            <div class="result-block">
+
+                                <div class="result-block-title">
+
+                                    <span class="block-icon">
+                                        ◉
+                                    </span>
+
+                                    <div>
+
+                                        <h4>
+                                            Evidence found
+                                        </h4>
+
+                                        <p>
+                                            Signals detected in
+                                            the submitted content.
+                                        </p>
+
+                                    </div>
+
+                                </div>
+
+                                <div
+                                    id="evidence"
+                                    class="evidence-list"
+                                ></div>
+
+                            </div>
+
+
+
+                            <!-- RED FLAGS -->
+
+                            <div class="result-block">
+
+                                <div class="result-block-title">
+
+                                    <span class="block-icon warning">
+                                        !
+                                    </span>
+
+                                    <div>
+
+                                        <h4>
+                                            Red flags
+                                        </h4>
+
+                                        <p>
+                                            Warning signs that
+                                            require attention.
+                                        </p>
+
+                                    </div>
+
+                                </div>
+
+                                <ul
+                                    id="flags-list"
+                                    class="flags-list"
+                                ></ul>
+
+                            </div>
+
+
+
+                            <!-- EXPLANATION -->
+
+                            <div class="explanation-box">
+
+                                <div class="result-block-title">
+
+                                    <span class="block-icon">
+                                        ✦
+                                    </span>
+
+                                    <div>
+
+                                        <h4>
+                                            Why we flagged it
+                                        </h4>
+
+                                    </div>
+
+                                </div>
+
+                                <p id="explanation-text">
+                                </p>
+
+                            </div>
+
+
+
+                            <!-- ACTION -->
+
+                            <div class="action-box">
+
+                                <div class="action-icon">
+                                    ✓
+                                </div>
+
+                                <div>
+
+                                    <span>
+                                        RECOMMENDED ACTION
+                                    </span>
+
+                                    <p id="action-text">
+                                    </p>
+
+                                </div>
+
+                            </div>
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+
+
+                <!-- =================================================
+                     TRUST STRIP
+                ================================================== -->
+
+                <div class="trust-strip">
+
+                    <div class="trust-item">
+
+                        <span>🧠</span>
+
+                        <div>
+                            <strong>AI Analysis</strong>
+                            <small>Multi-signal detection</small>
+                        </div>
+
+                    </div>
+
+
+                    <div class="trust-item">
+
+                        <span>🔒</span>
+
+                        <div>
+                            <strong>Privacy focused</strong>
+                            <small>Your content stays protected</small>
+                        </div>
+
+                    </div>
+
+
+                    <div class="trust-item">
+
+                        <span>⚡</span>
+
+                        <div>
+                            <strong>Fast results</strong>
+                            <small>Actionable guidance</small>
+                        </div>
+
+                    </div>
+
+
+                    <div class="trust-item">
+
+                        <span>👨‍👩‍👧</span>
+
+                        <div>
+                            <strong>Family protection</strong>
+                            <small>Alert trusted contacts</small>
+                        </div>
+
+                    </div>
+
+                </div>
+
+            </section>
+
+
+
+            <!-- =================================================
+                 FAMILY PANEL
+            ================================================== -->
+
+            <section
+                id="panel-family"
+                class="panel"
+                hidden
+            >
+
+                <div class="page-intro">
+
+                    <div>
+
+                        <div class="eyebrow">
+                            <span></span>
+                            FAMILY SAFETY
+                        </div>
+
+                        <h2>
+                            Protect your circle.
+                        </h2>
+
+                        <p>
+                            Add trusted people who can be
+                            notified when a high-risk threat
+                            is detected.
+                        </p>
+
+                    </div>
+
+                </div>
+
+
+                <div class="family-grid">
+
+
+                    <!-- ADD MEMBER -->
+
+                    <div class="card family-form-card">
+
+                        <div class="card-header">
+
+                            <div>
+
+                                <h3>
+                                    Add a trusted person
+                                </h3>
+
+                                <p>
+                                    Keep your safety circle
+                                    ready for emergencies.
+                                </p>
+
+                            </div>
+
+                            <span class="card-icon">
+                                +
+                            </span>
+
+                        </div>
+
+
+                        <form id="family-form">
+
+                            <div class="field">
+
+                                <label for="member-name">
+                                    Full name
+                                </label>
+
+                                <input
+                                    id="member-name"
+                                    type="text"
+                                    placeholder="e.g. Priya Sharma"
+                                    required
+                                >
+
+                            </div>
+
+
+                            <div class="field">
+
+                                <label for="member-relation">
+                                    Relationship
+                                </label>
+
+                                <input
+                                    id="member-relation"
+                                    type="text"
+                                    placeholder="e.g. Mother"
+                                >
+
+                            </div>
+
+
+                            <div class="field">
+
+                                <label for="member-phone">
+                                    Phone number
+                                </label>
+
+                                <input
+                                    id="member-phone"
+                                    type="tel"
+                                    placeholder="+91 XXXXX XXXXX"
+                                >
+
+                            </div>
+
+
+                            <div class="field">
+
+                                <label for="member-email">
+                                    Email address
+                                </label>
+
+                                <input
+                                    id="member-email"
+                                    type="email"
+                                    placeholder="name@example.com"
+                                >
+
+                            </div>
+
+
+                            <button
+                                type="submit"
+                                class="primary-btn"
+                            >
+
+                                <span>
+                                    + Add to family circle
+                                </span>
+
+                            </button>
+
+                        </form>
+
+                    </div>
+
+
+
+                    <!-- MEMBERS -->
+
+                    <div class="card family-members-card">
+
+                        <div class="card-header">
+
+                            <div>
+
+                                <h3>
+                                    Your family circle
+                                </h3>
+
+                                <p>
+                                    Trusted contacts for
+                                    protection alerts.
+                                </p>
+
+                            </div>
+
+                            <span class="people-count">
+                                Trusted
+                            </span>
+
+                        </div>
+
+
+                        <div
+                            id="family-empty"
+                            class="family-empty"
+                        >
+
+                            <div class="family-empty-icon">
+                                👨‍👩‍👧
+                            </div>
+
+                            <h4>
+                                No trusted contacts yet
+                            </h4>
+
+                            <p>
+                                Add someone you trust to
+                                activate family protection.
+                            </p>
+
+                        </div>
+
+
+                        <ul
+                            id="family-list"
+                            class="family-list"
+                        ></ul>
+
+                    </div>
+
+                </div>
+
+
+                <!-- FAMILY INFO -->
+
+                <div class="family-info-card">
+
+                    <div class="info-shield">
+                        🛡
+                    </div>
+
+                    <div>
+
+                        <strong>
+                            How family protection works
+                        </strong>
+
+                        <p>
+                            When RakshaCircle detects a
+                            high-risk threat, your trusted
+                            contacts can be notified so
+                            they can help you respond safely.
+                        </p>
+
+                    </div>
+
+                </div>
+
+            </section>
+
+
+
+            <!-- =================================================
+                 HISTORY PANEL
+            ================================================== -->
+
+            <section
+                id="panel-history"
+                class="panel"
+                hidden
+            >
+
+                <div class="page-intro">
+
+                    <div>
+
+                        <div class="eyebrow">
+                            <span></span>
+                            SECURITY ACTIVITY
+                        </div>
+
+                        <h2>
+                            Your scan history.
+                        </h2>
+
+                        <p>
+                            Review previous threat assessments
+                            and the actions RakshaCircle recommended.
+                        </p>
+
+                    </div>
+
+                </div>
+
+
+                <div class="card history-card-container">
+
+                    <div class="card-header">
+
+                        <div>
+
+                            <h3>
+                                Recent scans
+                            </h3>
+
+                            <p>
+                                Your latest RakshaCircle
+                                security checks.
+                            </p>
+
+                        </div>
+
+                    </div>
+
+
+                    <div
+                        id="history-list"
+                        class="history-list"
+                    >
+
+                        <div class="history-loading">
+                            Loading scan history...
+                        </div>
+
+                    </div>
+
+                </div>
+
+
+                <!-- EMERGENCY INFO -->
+
+                <div class="emergency-strip">
+
+                    <div class="emergency-icon">
+                        ⚠
+                    </div>
+
+                    <div>
+
+                        <strong>
+                            Suspected cyber fraud in India?
+                        </strong>
+
+                        <p>
+                            Call <b>1930</b> or report it through
+                            the National Cyber Crime Reporting Portal.
+                        </p>
+
+                    </div>
+
+                </div>
+
+            </section>
+
+        </main>
+
+
+
+        <!-- =================================================
+             FOOTER
+        ================================================== -->
+
+        <footer class="main-footer">
+
+            <span>
+                © 2026 RakshaCircle
+            </span>
+
+            <span>
+                Detect · Explain · Act · Protect
+            </span>
+
+            <span>
+                Built for safer digital India
+            </span>
+
+        </footer>
+
+    </div>
+
+</div>
+
+
+
+<!-- =========================================================
+     GOOGLE TRANSLATE
+========================================================= -->
+
+<script>
+
+function googleTranslateElementInit() {
+
+    new google.translate.TranslateElement(
+        {
+            pageLanguage: "en",
+            includedLanguages:
+                "en,hi,mr,ta,te,bn,gu,kn,ml,pa,ur",
+            autoDisplay: false
+        },
+        "google_translate_element"
+    );
+
+}
+
+
+function changeLanguage(language) {
+
+    const translateSelect =
+        document.querySelector(".goog-te-combo");
+
+    if (!translateSelect) {
+        console.log(
+            "Google Translate is loading..."
+        );
+        return;
+    }
+
+    translateSelect.value = language;
+
+    translateSelect.dispatchEvent(
+        new Event("change")
+    );
+
+}
+
+
+document.addEventListener(
+    "DOMContentLoaded",
+    function () {
+
+        const languageSelect =
+            document.getElementById(
+                "languageSelect"
+            );
+
+        if (!languageSelect) {
+            return;
+        }
+
+        languageSelect.addEventListener(
+            "change",
+            function () {
+
+                if (!this.value) {
+                    return;
+                }
+
+                changeLanguage(
+                    this.value
+                );
+
+            }
+        );
+
+    }
+);
+
+</script>
+
+
+<script
+    src="https://translate.google.com/translate_a/element.js?cb=googleTranslateElementInit"
+></script>
+
+
+
+<!-- =========================================================
+     PROJECT JAVASCRIPT
+========================================================= -->
+
+<script
+    src="{{ url_for('static', filename='js/script.js') }}"
+></script>
+
+
+</body>
+
+</html>
